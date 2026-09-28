@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import argon2 from 'argon2';
+import { issueTokens } from '../security/tokens.js';
 
 const passwordHashOptions = {
   type: argon2.argon2id,
@@ -30,7 +31,13 @@ function validateRegistration(input) {
   return { name, email, password, errors };
 }
 
-export function createAuthRouter(db) {
+let dummyHashPromise;
+function dummyHash() {
+  dummyHashPromise ??= argon2.hash('not-a-real-user-password', passwordHashOptions);
+  return dummyHashPromise;
+}
+
+export function createAuthRouter(db, jwt) {
   const router = Router();
 
   router.post('/register', async (req, res, next) => {
@@ -50,6 +57,36 @@ export function createAuthRouter(db) {
         throw error;
       }
       return res.status(201).json({ user: { id, name, email, role: 'member' } });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  router.post('/login', async (req, res, next) => {
+    const input = req.body;
+    if (!input || typeof input !== 'object' || Array.isArray(input) ||
+        typeof input.email !== 'string' || typeof input.password !== 'string') {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+    const email = input.email.trim().toLowerCase();
+    const password = input.password;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+
+    try {
+      const user = db.prepare('SELECT id, name, email, password_hash, role FROM users WHERE email = ?').get(email);
+      const matches = await argon2.verify(user?.password_hash ?? await dummyHash(), password);
+      if (!user || !matches) return res.status(401).json({ error: 'Invalid credentials' });
+
+      const tokens = await issueTokens(user.id, jwt);
+      db.prepare('INSERT INTO refresh_sessions (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)')
+        .run(tokens.sessionId, user.id, tokens.tokenHash, tokens.expiresAt);
+      return res.set('Cache-Control', 'no-store').json({
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        tokenType: 'Bearer',
+        expiresIn: jwt.accessSeconds,
+        user: { id: user.id, name: user.name, email: user.email, role: user.role }
+      });
     } catch (error) {
       return next(error);
     }

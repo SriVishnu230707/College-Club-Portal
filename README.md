@@ -1,6 +1,6 @@
 # College Club Portal
 
-Phase 1 requirements are in [docs/phase-1-requirements.md](docs/phase-1-requirements.md). Phase 2 provides the Express and SQLite foundation. Phase 3 adds member registration. Login, JWT issuance, and role enforcement are planned for later phases.
+Phase 1 requirements are in [docs/phase-1-requirements.md](docs/phase-1-requirements.md). Phase 2 provides the Express and SQLite foundation. Phase 3 adds member registration. Phase 4 adds login and JWT issuance. Protected routes, refresh rotation, and logout are planned for later phases.
 
 ## Local setup
 
@@ -25,6 +25,21 @@ Send `POST /auth/register` with JSON:
 ```
 
 Successful registration returns `201` with the new user's public `id`, `name`, `email`, and `member` role. It does not log the user in or issue a JWT yet. The password must be 12 to 128 characters. Registration is currently open to any email address; email verification has not been implemented. Duplicate emails return `409`.
+
+## Log in
+
+Send `POST /auth/login` with JSON:
+
+```json
+{
+  "email": "asha@example.edu",
+  "password": "a-long-private-password"
+}
+```
+
+A successful login returns `accessToken`, `refreshToken`, `tokenType: "Bearer"`, `expiresIn: 900`, and public user details. Invalid credentials return `401` without revealing whether the email or password was wrong. The access JWT lasts 15 minutes; the refresh JWT lasts 7 days. Both contain the user ID, but neither contains the password, password hash, or role. The refresh token's SHA-256 digest is stored in `refresh_sessions`; the token itself is not stored there.
+
+Token verification on protected routes and refresh-token exchange are not available yet. Those are Phases 5 and 6. Until then, issued access tokens cannot be used with another portal endpoint.
 
 SQLite data is stored under `data/` by default and is excluded from Git. Migrations run at server startup as well as through `npm run migrate`. The schema contains `users`, `refresh_sessions`, and `schema_migrations` tables. Visitors have no user row; registered accounts can have only `member` or `admin` as their role.
 

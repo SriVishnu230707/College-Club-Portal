@@ -4,6 +4,7 @@ import { createApp } from '../src/app.js';
 import { migrate, openDatabase } from '../src/db/index.js';
 
 const db = openDatabase(':memory:');
+const jwt = { accessSecret: 'test-access-secret-0123456789-abcdef', refreshSecret: 'test-refresh-secret-0123456789-abcdef', accessSeconds: 900, refreshSeconds: 604800 };
 after(() => db.close());
 
 test('migrations create the auth schema once and enforce roles and email uniqueness', () => {
@@ -24,7 +25,7 @@ test('migrations create the auth schema once and enforce roles and email uniquen
 
 test('health reports unavailable when the schema has not been migrated', async () => {
   const emptyDb = openDatabase(':memory:');
-  const server = createApp({ db: emptyDb }).listen(0);
+  const server = createApp({ db: emptyDb, jwt }).listen(0);
   try {
     const response = await fetch(`http://127.0.0.1:${server.address().port}/health`);
     assert.equal(response.status, 503);
@@ -36,7 +37,7 @@ test('health reports unavailable when the schema has not been migrated', async (
 });
 
 test('Express health endpoint checks the database', async () => {
-  const server = createApp({ db }).listen(0);
+  const server = createApp({ db, jwt }).listen(0);
   try {
     const response = await fetch(`http://127.0.0.1:${server.address().port}/health`);
     assert.equal(response.status, 200);

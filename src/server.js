@@ -5,7 +5,7 @@ import { migrate, openDatabase } from './db/index.js';
 const config = loadConfig();
 const db = openDatabase(config.databaseFile);
 migrate(db);
-const server = createApp({ db }).listen(config.port, () => {
+const server = createApp({ db, jwt: config.jwt }).listen(config.port, () => {
   console.log(`College Club Portal API listening on port ${server.address().port}`);
 });
 

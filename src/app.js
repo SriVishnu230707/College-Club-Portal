@@ -1,11 +1,12 @@
 import express from 'express';
 import { createAuthRouter } from './routes/auth.js';
 
-export function createApp({ db }) {
+export function createApp({ db, jwt }) {
+  if (!jwt) throw new Error('JWT configuration is required');
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '16kb' }));
-  app.use('/auth', createAuthRouter(db));
+  app.use('/auth', createAuthRouter(db, jwt));
 
   app.get('/health', (_req, res) => {
     try {

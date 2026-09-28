@@ -1,6 +1,6 @@
 {
   "name": "college-club-portal",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,6 +16,7 @@
     "argon2": "^0.45.1",
     "better-sqlite3": "^12.2.0",
     "dotenv": "^17.2.2",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "jose": "^6.2.12"
   }
 }

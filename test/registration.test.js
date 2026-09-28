@@ -4,10 +4,12 @@ import argon2 from 'argon2';
 import { createApp } from '../src/app.js';
 import { migrate, openDatabase } from '../src/db/index.js';
 
+const jwt = { accessSecret: 'test-access-secret-0123456789-abcdef', refreshSecret: 'test-refresh-secret-0123456789-abcdef', accessSeconds: 900, refreshSeconds: 604800 };
+
 async function withApp(run) {
   const db = openDatabase(':memory:');
   migrate(db);
-  const server = createApp({ db }).listen(0);
+  const server = createApp({ db, jwt }).listen(0);
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   try { await run({ db, baseUrl }); }
   finally {
