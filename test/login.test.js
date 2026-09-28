@@ -48,6 +48,7 @@ test('login verifies the hashed password, signs separate JWTs, and stores only a
     });
     assert.equal(access.payload.sub, result.user.id);
     assert.equal(access.payload.type, 'access');
+    assert.ok(access.payload.jti);
     assert.equal(refresh.payload.sub, result.user.id);
     assert.equal(refresh.payload.type, 'refresh');
     assert.ok(refresh.payload.jti);
@@ -62,6 +63,18 @@ test('login verifies the hashed password, signs separate JWTs, and stores only a
     assert.equal(session.token_hash, createHash('sha256').update(result.refreshToken).digest('hex'));
     assert.notEqual(session.token_hash, result.refreshToken);
     assert.equal(session.revoked_at, null);
+  });
+});
+
+test('separate logins receive distinct access tokens and refresh sessions', async () => {
+  await withApp(async ({ db, post }) => {
+    const credentials = { email: 'asha@example.edu', password: 'a-long-private-password' };
+    await post('/auth/register', { ...credentials, name: 'Asha' });
+    const first = await (await post('/auth/login', credentials)).json();
+    const second = await (await post('/auth/login', credentials)).json();
+    assert.notEqual(first.accessToken, second.accessToken);
+    assert.notEqual(first.refreshToken, second.refreshToken);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM refresh_sessions').get().count, 2);
   });
 });
 

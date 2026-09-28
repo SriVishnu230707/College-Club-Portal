@@ -12,6 +12,7 @@ export async function issueTokens(userId, jwt) {
     .setIssuer(issuer)
     .setAudience('college-club-portal:access')
     .setSubject(userId)
+    .setJti(randomUUID())
     .setIssuedAt(now)
     .setExpirationTime(now + jwt.accessSeconds)
     .sign(encoder.encode(jwt.accessSecret));

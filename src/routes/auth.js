@@ -31,11 +31,8 @@ function validateRegistration(input) {
   return { name, email, password, errors };
 }
 
-let dummyHashPromise;
-function dummyHash() {
-  dummyHashPromise ??= argon2.hash('not-a-real-user-password', passwordHashOptions);
-  return dummyHashPromise;
-}
+// Keep unknown-email verification close to the cost of a real password check.
+const dummyPasswordHash = '$argon2id$v=19$m=19456,p=1,t=2$fbF9/v543Xm49210Q6qn0A$qVt7QsM7rU0fz7RXUn3kZDbyOJfrQ2/pr9ms5qwxi24';
 
 export function createAuthRouter(db, jwt) {
   const router = Router();
@@ -74,7 +71,7 @@ export function createAuthRouter(db, jwt) {
 
     try {
       const user = db.prepare('SELECT id, name, email, password_hash, role FROM users WHERE email = ?').get(email);
-      const matches = await argon2.verify(user?.password_hash ?? await dummyHash(), password);
+      const matches = await argon2.verify(user?.password_hash ?? dummyPasswordHash, password);
       if (!user || !matches) return res.status(401).json({ error: 'Invalid credentials' });
 
       const tokens = await issueTokens(user.id, jwt);
