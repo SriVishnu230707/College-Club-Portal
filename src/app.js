@@ -1,12 +1,16 @@
 import express from 'express';
+import { createAuthGuards } from './middleware/auth.js';
+import { createAdminRouter } from './routes/admin.js';
 import { createAuthRouter } from './routes/auth.js';
 
 export function createApp({ db, jwt }) {
   if (!jwt) throw new Error('JWT configuration is required');
   const app = express();
+  const guards = createAuthGuards(db, jwt);
   app.disable('x-powered-by');
   app.use(express.json({ limit: '16kb' }));
-  app.use('/auth', createAuthRouter(db, jwt));
+  app.use('/auth', createAuthRouter(db, jwt, guards));
+  app.use('/admin', createAdminRouter(db, guards));
 
   app.get('/health', (_req, res) => {
     try {

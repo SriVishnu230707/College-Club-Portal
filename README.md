@@ -1,6 +1,6 @@
 # College Club Portal
 
-Phase 1 requirements are in [docs/phase-1-requirements.md](docs/phase-1-requirements.md). Phase 2 provides the Express and SQLite foundation. Phase 3 adds member registration. Phase 4 adds login and JWT issuance. Protected routes, refresh rotation, and logout are planned for later phases.
+Phase 1 requirements are in [docs/phase-1-requirements.md](docs/phase-1-requirements.md). Phase 2 provides the Express and SQLite foundation. Phase 3 adds member registration. Phase 4 adds login and JWT issuance. Phase 5 verifies access tokens and enforces member/admin roles. Refresh rotation and logout are planned for Phase 6.
 
 ## Local setup
 
@@ -39,7 +39,21 @@ Send `POST /auth/login` with JSON:
 
 A successful login returns `accessToken`, `refreshToken`, `tokenType: "Bearer"`, `expiresIn: 900`, and public user details. Invalid credentials return `401` without revealing whether the email or password was wrong. The access JWT lasts 15 minutes; the refresh JWT lasts 7 days. Both contain the user ID, but neither contains the password, password hash, or role. The refresh token's SHA-256 digest is stored in `refresh_sessions`; the token itself is not stored there.
 
-Token verification on protected routes and refresh-token exchange are not available yet. Those are Phases 5 and 6. Until then, issued access tokens cannot be used with another portal endpoint.
+## Protected routes and admin access
+
+Send `Authorization: Bearer <accessToken>` with a protected request:
+
+| Method | Route | Access |
+| --- | --- | --- |
+| `GET` | `/health` | Everyone, including visitors |
+| `GET` | `/auth/me` | Member or admin |
+| `GET` | `/admin/users` | Admin only |
+
+`/auth/me` returns the current user's public details. `/admin/users` returns public details for all users, without password hashes. Missing, invalid, expired, or refresh tokens receive `401`; a signed-in member calling an admin route receives `403`. Roles are read from SQLite for every protected request, so a role change takes effect without issuing a new access token.
+
+Public registration never grants admin rights. To promote an existing account locally, run `npm run make-admin -- person@example.edu`. This command is only available from a trusted server terminal; it is not an API endpoint.
+
+Refresh-token exchange and logout are not available yet. Issued access tokens remain valid until expiry unless the user account is removed. Club and event routes will be added in later portal work.
 
 SQLite data is stored under `data/` by default and is excluded from Git. Migrations run at server startup as well as through `npm run migrate`. The schema contains `users`, `refresh_sessions`, and `schema_migrations` tables. Visitors have no user row; registered accounts can have only `member` or `admin` as their role.
 

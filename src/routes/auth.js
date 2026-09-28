@@ -34,8 +34,12 @@ function validateRegistration(input) {
 // Keep unknown-email verification close to the cost of a real password check.
 const dummyPasswordHash = '$argon2id$v=19$m=19456,p=1,t=2$fbF9/v543Xm49210Q6qn0A$qVt7QsM7rU0fz7RXUn3kZDbyOJfrQ2/pr9ms5qwxi24';
 
-export function createAuthRouter(db, jwt) {
+export function createAuthRouter(db, jwt, guards) {
   const router = Router();
+
+  router.get('/me', guards.requireAuth, (req, res) => {
+    res.set('Cache-Control', 'no-store').json({ user: req.user });
+  });
 
   router.post('/register', async (req, res, next) => {
     const { name, email, password, errors } = validateRegistration(req.body);

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { SignJWT } from 'jose';
+import { SignJWT, jwtVerify } from 'jose';
 
 const issuer = 'college-club-portal';
 const encoder = new TextEncoder();
@@ -34,4 +34,18 @@ export async function issueTokens(userId, jwt) {
     tokenHash: createHash('sha256').update(refreshToken).digest('hex'),
     expiresAt: new Date((now + jwt.refreshSeconds) * 1000).toISOString()
   };
+}
+
+export async function verifyAccessToken(token, jwt) {
+  const { payload } = await jwtVerify(token, encoder.encode(jwt.accessSecret), {
+    algorithms: ['HS256'],
+    issuer,
+    audience: 'college-club-portal:access',
+    typ: 'JWT',
+    requiredClaims: ['sub', 'iat', 'exp', 'jti']
+  });
+  if (payload.type !== 'access' || typeof payload.sub !== 'string' || !payload.sub) {
+    throw new Error('Invalid access token');
+  }
+  return payload;
 }
