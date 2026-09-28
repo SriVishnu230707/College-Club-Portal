@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import argon2 from 'argon2';
+import { saveRefreshSession } from '../security/sessions.js';
 import { issueTokens } from '../security/tokens.js';
 
 const passwordHashOptions = {
@@ -79,8 +80,7 @@ export function createAuthRouter(db, jwt, guards) {
       if (!user || !matches) return res.status(401).json({ error: 'Invalid credentials' });
 
       const tokens = await issueTokens(user.id, jwt);
-      db.prepare('INSERT INTO refresh_sessions (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)')
-        .run(tokens.sessionId, user.id, tokens.tokenHash, tokens.expiresAt);
+      saveRefreshSession(db, user.id, tokens);
       return res.set('Cache-Control', 'no-store').json({
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,

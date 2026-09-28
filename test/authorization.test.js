@@ -54,7 +54,7 @@ test('visitors, members, and admins receive their intended access', async () => 
     db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(login.user.id);
     const admin = await get('/admin/users', login.accessToken);
     assert.equal(admin.status, 200);
-    assert.deepEqual(await admin.json(), { users: [{ ...login.user, role: 'admin' }] });
+    assert.deepEqual(await admin.json(), { users: [{ ...login.user, role: 'admin' }], nextCursor: null });
     assert.equal(admin.headers.get('cache-control'), 'no-store');
     assert.equal((await (await get('/auth/me', login.accessToken)).json()).user.role, 'admin');
 

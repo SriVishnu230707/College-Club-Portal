@@ -4,9 +4,20 @@ export function createAdminRouter(db, guards) {
   const router = Router();
   router.use(guards.requireAuth, guards.requireRole('admin'));
 
-  router.get('/users', (_req, res) => {
-    const users = db.prepare('SELECT id, name, email, role FROM users ORDER BY created_at, id').all();
-    res.set('Cache-Control', 'no-store').json({ users });
+  router.get('/users', (req, res) => {
+    const rawLimit = req.query.limit;
+    const limit = rawLimit === undefined ? 50 : Number(rawLimit);
+    const cursor = req.query.cursor === undefined ? '' : req.query.cursor;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 ||
+        typeof cursor !== 'string' || cursor.length > 128) {
+      return res.status(400).json({ error: 'Invalid pagination parameters' });
+    }
+    const rows = db.prepare(
+      'SELECT id, name, email, role FROM users WHERE id > ? ORDER BY id LIMIT ?'
+    ).all(cursor, limit + 1);
+    const users = rows.slice(0, limit);
+    const nextCursor = rows.length > limit ? users[users.length - 1].id : null;
+    return res.set('Cache-Control', 'no-store').json({ users, nextCursor });
   });
 
   return router;
