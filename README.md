@@ -1,6 +1,6 @@
 # College Club Portal
 
-Phase 1 requirements are in [docs/phase-1-requirements.md](docs/phase-1-requirements.md). Phase 2 provides the Express and SQLite foundation. Phase 3 adds member registration. Phase 4 adds login and JWT issuance. Phase 5 verifies access tokens and enforces member/admin roles. Phase 6 adds refresh rotation, replay detection, and logout.
+Phase 1 requirements are in [docs/phase-1-requirements.md](docs/phase-1-requirements.md). Phase 2 provides the Express and SQLite foundation. Phase 3 adds member registration. Phase 4 adds login and JWT issuance. Phase 5 verifies access tokens and enforces member/admin roles. Phase 6 adds refresh rotation, replay detection, and logout. Phase 7 adds clubs, join requests with college ID card photos, and admin review.
 
 ## Local setup
 
@@ -59,14 +59,30 @@ Send `POST /auth/refresh` with JSON `{ "refreshToken": "<refreshToken>" }` befor
 
 Send `POST /auth/logout` with the current refresh token in the same JSON shape. It revokes that login's token family and returns `204`. Repeating logout also returns `204`. Other logins remain active. A previously issued access token remains usable until its 15-minute expiry, unless the account is removed. The client should discard both tokens on logout. A refreshed response reads the current role from SQLite; visitors have no tokens.
 
-Club and event routes will be added in later portal work.
+## Clubs and membership
+
+Visitors can list published clubs with `GET /clubs?limit=50&cursor=<nextCursor>` and view one with `GET /clubs/:id`. Draft and archived clubs are hidden from public routes. Members and admins can view their own approved memberships with `GET /clubs/mine` using an access token; this list supports the same pagination parameters.
+
+Joining a club requires a college ID card photo and admin review. Send `POST /clubs/:id/join` with `Authorization: Bearer <accessToken>`, `Content-Type: image/jpeg`, `image/png`, or `image/webp`, and the **raw image bytes** as the request body. The 2 MB maximum applies to the whole image. The endpoint returns `201` with a pending request ID. The photo's content signature must match the declared type. This API accepts a raw image body, not multipart form data. Only one pending request per member and club is allowed. Ten join attempts per account per day are permitted on this single server.
+
+An admin reviews pending requests with `GET /admin/clubs/:id/requests`, downloads a photo with `GET /admin/join-requests/:id/id-card`, then sends `POST /admin/join-requests/:id/approve` or `/reject`. Approval creates the membership. Rejection permits a new application. Both decisions clear the photo bytes from the active database record. Pending requests expire after 30 days; expiry clears the photo at startup, during join/review operations, or during an hourly server sweep. The photo endpoint is admin-only and uses `Cache-Control: no-store` and an attachment response. The SQLite database contains sensitive photos while requests are pending; restrict access to the database files and backups. SQLite/WAL or backups may retain earlier bytes after a record is cleared, so backup retention and disk protection matter.
+
+Members leave with `DELETE /clubs/:id/membership`. The user ID always comes from the verified access token; a client cannot specify someone else's membership. A member who leaves must submit a new join request and photo to rejoin. Admins can create clubs with `POST /admin/clubs`, list all clubs with `GET /admin/clubs`, edit them with `PATCH /admin/clubs/:id`, and view approved members with `GET /admin/clubs/:id/members`. Club input accepts `name` (2–100 characters), unique lowercase `slug`, `description` (up to 2,000 characters), and `status` (`draft`, `published`, or `archived`). Admin list endpoints are paginated with `limit` and `cursor`.
+
+Example admin club creation body:
+
+```json
+{"name":"Robotics Club","slug":"robotics-club","description":"Build and learn together","status":"published"}
+```
+
+Events will be added in later portal work.
 
 ## Traffic limits and deployment
 
-The single-server API limits registration to 30 requests per IP in 15 minutes, login to 300 requests per IP and 20 per normalized email in 15 minutes, refresh/logout to 300 combined requests per IP in 15 minutes, and password-hashing work to 8 concurrent requests. Excess attempts return `429`; an overloaded password worker returns `503` with a short retry hint. Each account can have at most 10 active login sessions. Revoked and rotated token digests are retained until expiry so reuse can be detected; expired records are removed during login or refresh.
+The single-server API limits registration to 30 requests per IP in 15 minutes, login to 300 requests per IP and 20 per normalized email in 15 minutes, refresh/logout to 300 combined requests per IP in 15 minutes, join attempts to 10 per account per day, and password-hashing work to 8 concurrent requests. Excess attempts return `429`; an overloaded password worker returns `503` with a short retry hint. Each account can have at most 10 active login sessions. Revoked and rotated token digests are retained until expiry so reuse can be detected; expired records are removed during login or refresh.
 
 The default `TRUST_PROXY_HOPS=0` ignores client-supplied forwarding headers. If the API is reachable only through a known reverse proxy, set this to the exact number of trusted proxy hops so IP limits identify clients correctly. Never increase it while clients can connect directly to the API.
 
-SQLite data is stored under `data/` by default and is excluded from Git. Migrations run at server startup as well as through `npm run migrate`. The schema contains `users`, `refresh_sessions`, and `schema_migrations` tables. Visitors have no user row; registered accounts can have only `member` or `admin` as their role.
+SQLite data is stored under `data/` by default and is excluded from Git. Migrations run at server startup as well as through `npm run migrate`. The schema contains `users`, `refresh_sessions`, `clubs`, `club_memberships`, `club_join_requests`, and `schema_migrations` tables. Visitors have no user row; registered accounts can have only `member` or `admin` as their role.
 
 The current SQLite foundation and in-memory rate-limit counters are intended for one server instance. A multi-instance deployment needs a shared database and shared rate-limit store. SQLite WAL permits concurrent readers but only one writer at a time; plan a server database before running many API instances. Registration currently returns `409` for an existing email, which reveals account existence and remains a Phase 1 product decision to revisit before public deployment.

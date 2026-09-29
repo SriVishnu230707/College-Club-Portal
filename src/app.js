@@ -3,10 +3,16 @@ import { createAuthGuards } from './middleware/auth.js';
 import { createAuthThrottle, createPasswordWorkLimit } from './middleware/auth-throttle.js';
 import { createAdminRouter } from './routes/admin.js';
 import { createAuthRouter } from './routes/auth.js';
+import { createClubsRouter } from './routes/clubs.js';
+import { expireJoinRequests } from './clubs.js';
 
 export function createApp({ db, jwt, trustProxyHops = 0, rateLimits, authHashConcurrency = 8 }) {
   if (!jwt) throw new Error('JWT configuration is required');
   const app = express();
+  // Release ID card photos from requests that expired while the server was offline.
+  if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'club_join_requests'").get()) {
+    expireJoinRequests(db);
+  }
   const guards = createAuthGuards(db, jwt);
   const throttle = createAuthThrottle(rateLimits);
   const passwordWorkLimit = createPasswordWorkLimit(authHashConcurrency);
@@ -21,6 +27,7 @@ export function createApp({ db, jwt, trustProxyHops = 0, rateLimits, authHashCon
   app.use('/auth/register', passwordWorkLimit);
   app.use('/auth/login', throttle.loginAccount, passwordWorkLimit);
   app.use('/auth', createAuthRouter(db, jwt, guards));
+  app.use('/clubs', createClubsRouter(db, guards));
   app.use('/admin', createAdminRouter(db, guards));
 
   app.get('/health', (_req, res) => {
