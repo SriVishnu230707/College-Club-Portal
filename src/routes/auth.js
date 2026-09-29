@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import argon2 from 'argon2';
-import { saveRefreshSession } from '../security/sessions.js';
-import { issueTokens } from '../security/tokens.js';
+import { revokeRefreshSession, rotateRefreshSession, saveRefreshSession } from '../security/sessions.js';
+import { issueTokens, refreshTokenDigest, verifyRefreshToken } from '../security/tokens.js';
 
 const passwordHashOptions = {
   type: argon2.argon2id,
@@ -34,6 +34,22 @@ function validateRegistration(input) {
 
 // Keep unknown-email verification close to the cost of a real password check.
 const dummyPasswordHash = '$argon2id$v=19$m=19456,p=1,t=2$fbF9/v543Xm49210Q6qn0A$qVt7QsM7rU0fz7RXUn3kZDbyOJfrQ2/pr9ms5qwxi24';
+
+function validRefreshInput(body) {
+  return body && typeof body === 'object' && !Array.isArray(body) &&
+    typeof body.refreshToken === 'string' && body.refreshToken.length > 0 &&
+    body.refreshToken.length <= 4096;
+}
+
+function sendTokens(res, tokens, user, jwt) {
+  return res.set('Cache-Control', 'no-store').json({
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    tokenType: 'Bearer',
+    expiresIn: jwt.accessSeconds,
+    user: { id: user.id, name: user.name, email: user.email, role: user.role }
+  });
+}
 
 export function createAuthRouter(db, jwt, guards) {
   const router = Router();
@@ -81,13 +97,41 @@ export function createAuthRouter(db, jwt, guards) {
 
       const tokens = await issueTokens(user.id, jwt);
       saveRefreshSession(db, user.id, tokens);
-      return res.set('Cache-Control', 'no-store').json({
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        tokenType: 'Bearer',
-        expiresIn: jwt.accessSeconds,
-        user: { id: user.id, name: user.name, email: user.email, role: user.role }
-      });
+      return sendTokens(res, tokens, user, jwt);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  router.post('/refresh', async (req, res, next) => {
+    if (!validRefreshInput(req.body)) return res.status(400).json({ error: 'Refresh token is required' });
+    try {
+      let claims;
+      try {
+        claims = await verifyRefreshToken(req.body.refreshToken, jwt);
+      } catch {
+        return res.status(401).json({ error: 'Invalid refresh token' });
+      }
+      const tokens = await issueTokens(claims.sub, jwt);
+      const result = rotateRefreshSession(db, claims, refreshTokenDigest(req.body.refreshToken), tokens);
+      if (result.status !== 'ok') return res.status(401).json({ error: 'Invalid refresh token' });
+      return sendTokens(res, tokens, result.user, jwt);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  router.post('/logout', async (req, res, next) => {
+    if (!validRefreshInput(req.body)) return res.status(400).json({ error: 'Refresh token is required' });
+    try {
+      let claims;
+      try {
+        claims = await verifyRefreshToken(req.body.refreshToken, jwt);
+      } catch {
+        return res.set('Cache-Control', 'no-store').status(204).end();
+      }
+      revokeRefreshSession(db, claims, refreshTokenDigest(req.body.refreshToken));
+      return res.set('Cache-Control', 'no-store').status(204).end();
     } catch (error) {
       return next(error);
     }

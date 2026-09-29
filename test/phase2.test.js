@@ -8,11 +8,11 @@ const jwt = { accessSecret: 'test-access-secret-0123456789-abcdef', refreshSecre
 after(() => db.close());
 
 test('migrations create the auth schema once and enforce roles and email uniqueness', () => {
-  assert.deepEqual(migrate(db), { applied: 1, total: 1 });
-  assert.deepEqual(migrate(db), { applied: 0, total: 1 });
+  assert.deepEqual(migrate(db), { applied: 2, total: 2 });
+  assert.deepEqual(migrate(db), { applied: 0, total: 2 });
   assert.deepEqual(
     db.prepare("SELECT name FROM schema_migrations ORDER BY name").all().map(row => row.name),
-    ['001_auth_foundation.sql']
+    ['001_auth_foundation.sql', '002_refresh_rotation.sql']
   );
   db.prepare('INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)')
     .run('u1', 'Asha', 'asha@example.edu', 'test-hash');

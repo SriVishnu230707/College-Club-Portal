@@ -1,6 +1,6 @@
 # College Club Portal
 
-Phase 1 requirements are in [docs/phase-1-requirements.md](docs/phase-1-requirements.md). Phase 2 provides the Express and SQLite foundation. Phase 3 adds member registration. Phase 4 adds login and JWT issuance. Phase 5 verifies access tokens and enforces member/admin roles. Refresh rotation and logout are planned for Phase 6.
+Phase 1 requirements are in [docs/phase-1-requirements.md](docs/phase-1-requirements.md). Phase 2 provides the Express and SQLite foundation. Phase 3 adds member registration. Phase 4 adds login and JWT issuance. Phase 5 verifies access tokens and enforces member/admin roles. Phase 6 adds refresh rotation, replay detection, and logout.
 
 ## Local setup
 
@@ -53,11 +53,17 @@ Send `Authorization: Bearer <accessToken>` with a protected request:
 
 Public registration never grants admin rights. To promote an existing account locally, run `npm run make-admin -- person@example.edu`. This command is only available from a trusted server terminal; it is not an API endpoint.
 
-Refresh-token exchange and logout are not available yet. Issued access tokens remain valid until expiry unless the user account is removed. Club and event routes will be added in later portal work.
+## Refresh and logout
+
+Send `POST /auth/refresh` with JSON `{ "refreshToken": "<refreshToken>" }` before the access token expires. It returns the same response shape as login, with a new access token and a new refresh token. Replace the stored refresh token immediately. Each refresh token can be exchanged only once. If an already exchanged token is used again, all active refresh tokens in that login's token family are revoked. Clients should coordinate refresh calls so only one request exchanges a given token at a time. Invalid or expired tokens return `401`.
+
+Send `POST /auth/logout` with the current refresh token in the same JSON shape. It revokes that login's token family and returns `204`. Repeating logout also returns `204`. Other logins remain active. A previously issued access token remains usable until its 15-minute expiry, unless the account is removed. The client should discard both tokens on logout. A refreshed response reads the current role from SQLite; visitors have no tokens.
+
+Club and event routes will be added in later portal work.
 
 ## Traffic limits and deployment
 
-The single-server API limits registration to 30 requests per IP in 15 minutes, login to 300 requests per IP and 20 per normalized email in 15 minutes, and password-hashing work to 8 concurrent requests. Excess attempts return `429`; an overloaded password worker returns `503` with a short retry hint. Each account retains at most 10 recent refresh sessions, so repeated logins cannot grow that account's session history indefinitely.
+The single-server API limits registration to 30 requests per IP in 15 minutes, login to 300 requests per IP and 20 per normalized email in 15 minutes, refresh/logout to 300 combined requests per IP in 15 minutes, and password-hashing work to 8 concurrent requests. Excess attempts return `429`; an overloaded password worker returns `503` with a short retry hint. Each account can have at most 10 active login sessions. Revoked and rotated token digests are retained until expiry so reuse can be detected; expired records are removed during login or refresh.
 
 The default `TRUST_PROXY_HOPS=0` ignores client-supplied forwarding headers. If the API is reachable only through a known reverse proxy, set this to the exact number of trusted proxy hops so IP limits identify clients correctly. Never increase it while clients can connect directly to the API.
 

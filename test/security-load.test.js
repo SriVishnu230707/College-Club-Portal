@@ -85,11 +85,15 @@ test('repeated logins retain only the newest refresh sessions', async () => {
   await withApp({}, async ({ db, post }) => {
     const credentials = { email: 'asha@example.edu', password: 'a-long-private-password' };
     await post('/auth/register', { ...credentials, name: 'Asha' });
+    let oldest;
     for (let index = 0; index < MAX_REFRESH_SESSIONS_PER_USER + 2; index += 1) {
-      assert.equal((await post('/auth/login', credentials)).status, 200);
+      const response = await post('/auth/login', credentials);
+      assert.equal(response.status, 200);
+      if (index === 0) oldest = (await response.json()).refreshToken;
     }
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM refresh_sessions').get().count,
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM refresh_sessions WHERE revoked_at IS NULL').get().count,
       MAX_REFRESH_SESSIONS_PER_USER);
+    assert.equal((await post('/auth/refresh', { refreshToken: oldest })).status, 401);
   });
 });
 

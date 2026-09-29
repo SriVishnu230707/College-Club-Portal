@@ -20,7 +20,7 @@ test('registered users and refresh sessions survive a database restart', async (
   let server;
   try {
     db = openDatabase(file);
-    assert.deepEqual(migrate(db), { applied: 1, total: 1 });
+    assert.deepEqual(migrate(db), { applied: 2, total: 2 });
     server = createApp({ db, jwt }).listen(0);
     const url = `http://127.0.0.1:${server.address().port}`;
     const post = (path, body) => fetch(`${url}${path}`, {
@@ -35,7 +35,7 @@ test('registered users and refresh sessions survive a database restart', async (
     db = undefined;
 
     db = openDatabase(file);
-    assert.deepEqual(migrate(db), { applied: 0, total: 1 });
+    assert.deepEqual(migrate(db), { applied: 0, total: 2 });
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM users').get().count, 1);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM refresh_sessions').get().count, 1);
     server = createApp({ db, jwt }).listen(0);
