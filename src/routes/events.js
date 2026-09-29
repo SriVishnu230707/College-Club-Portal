@@ -79,11 +79,12 @@ export function createEventsRouter(db, guards) {
   router.delete('/:id/registration', guards.requireAuth, registrationLimit, (req, res) => {
     const result = db.transaction(() => {
       const registration = db.prepare(`
-        SELECT e.starts_at AS startsAt FROM event_registrations r
+        SELECT e.starts_at AS startsAt, e.status FROM event_registrations r
         JOIN events e ON e.id = r.event_id
         WHERE r.event_id = ? AND r.user_id = ?
       `).get(req.params.id, req.user.id);
       if (!registration) return { status: 404, error: 'Registration not found' };
+      if (registration.status === 'cancelled') return { status: 409, error: 'Cancelled event registrations are retained' };
       if (registration.startsAt <= new Date().toISOString()) return { status: 409, error: 'Cancellation is closed' };
       const deleted = db.prepare('DELETE FROM event_registrations WHERE event_id = ? AND user_id = ?')
         .run(req.params.id, req.user.id);

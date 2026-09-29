@@ -3,7 +3,8 @@ import { ipKeyGenerator, rateLimit } from 'express-rate-limit';
 
 const response = { error: 'Too many requests. Try again later.' };
 
-export function createAuthThrottle({ registrationPerIp = 30, loginPerIp = 300, loginPerAccount = 20, sessionPerIp = 300 } = {}) {
+export function createAuthThrottle({ registrationPerIp = 30, loginPerIp = 300, loginPerAccount = 20,
+  sessionPerIp = 300, eventMutationPerIp = 300 } = {}) {
   const shared = {
     windowMs: 15 * 60 * 1000,
     standardHeaders: 'draft-8',
@@ -14,6 +15,7 @@ export function createAuthThrottle({ registrationPerIp = 30, loginPerIp = 300, l
     registration: rateLimit({ ...shared, limit: registrationPerIp }),
     loginIp: rateLimit({ ...shared, limit: loginPerIp }),
     sessionIp: rateLimit({ ...shared, limit: sessionPerIp }),
+    eventMutationIp: rateLimit({ ...shared, limit: eventMutationPerIp }),
     loginAccount: rateLimit({
       ...shared,
       limit: loginPerAccount,

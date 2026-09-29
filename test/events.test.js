@@ -99,12 +99,15 @@ test('club-only events require approved membership and leaving removes future re
     const requestId = (await join.json()).request.id;
     assert.equal((await request(`/admin/join-requests/${requestId}/approve`, 'POST', admin)).status, 200);
     assert.equal((await request(`/events/${workshop.id}/register`, 'POST', member, { userId: 'somebody-else' })).status, 201);
+    const openEvent = await event(admin, host.id, { audience: 'all_members' });
+    assert.equal((await request(`/events/${openEvent.id}/register`, 'POST', member)).status, 201);
     assert.equal((await request(`/events/${workshop.id}/register`, 'POST', member)).status, 409);
-    assert.equal((await (await request('/events/mine', 'GET', member)).json()).events.length, 1);
+    assert.equal((await (await request('/events/mine', 'GET', member)).json()).events.length, 2);
     assert.equal((await (await request('/events/mine', 'GET', other)).json()).events.length, 0);
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM event_registrations').get().count, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM event_registrations').get().count, 2);
     assert.equal((await request(`/clubs/${host.id}/membership`, 'DELETE', member)).status, 204);
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM event_registrations').get().count, 0);
+    assert.deepEqual(db.prepare('SELECT event_id AS eventId FROM event_registrations').all(),
+      [{ eventId: openEvent.id }]);
   });
 });
 
@@ -148,10 +151,32 @@ test('edits preserve registration eligibility, capacity, and cancellation histor
     assert.equal((await request(`/admin/events/${workshop.id}`, 'PATCH', admin, { status: 'cancelled' })).status, 200);
     assert.equal((await request(`/events/${workshop.id}`)).status, 404);
     assert.equal((await request(`/events/${workshop.id}/register`, 'POST', member)).status, 404);
+    assert.equal((await request(`/events/${workshop.id}/registration`, 'DELETE', member)).status, 409);
     assert.equal((await (await request('/events/mine', 'GET', member)).json()).events[0].status, 'cancelled');
     assert.equal((await request(`/admin/events/${workshop.id}`, 'PATCH', admin, { status: 'published' })).status, 409);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM event_registrations').get().count, 2);
   });
+});
+
+test('malformed event mutations count toward an IP limit before JSON parsing', async () => {
+  const db = openDatabase(':memory:');
+  migrate(db);
+  const server = createApp({
+    db, jwt, idCardSecret: 'test-id-card-secret-0123456789-abcdef',
+    rateLimits: { eventMutationPerIp: 2 }
+  }).listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const malformed = path => fetch(`${base}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: '{'
+  });
+  try {
+    assert.equal((await malformed('/events/unknown/register')).status, 400);
+    assert.equal((await malformed('/events/unknown/registration')).status, 400);
+    assert.equal((await malformed('/events/unknown/register')).status, 429);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    db.close();
+  }
 });
 
 test('invalid dates and started events cannot receive registrations', async () => {

@@ -30,6 +30,8 @@ export function createApp({ db, jwt, idCardSecret, trustProxyHops = 0, rateLimit
   app.use('/auth/login', throttle.loginIp);
   app.use('/auth/refresh', throttle.sessionIp);
   app.use('/auth/logout', throttle.sessionIp);
+  app.use('/events/:id/register', throttle.eventMutationIp);
+  app.use('/events/:id/registration', throttle.eventMutationIp);
   app.use(express.json({ limit: '16kb' }));
   app.use('/auth/register', passwordWorkLimit);
   app.use('/auth/login', throttle.loginAccount, passwordWorkLimit);
