@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import sharp from 'sharp';
 import { createApp } from '../src/app.js';
 import { migrate, openDatabase } from '../src/db/index.js';
 
@@ -9,12 +10,13 @@ const jwt = {
   accessSeconds: 900,
   refreshSeconds: 604800
 };
-const photo = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(128)]);
+const photo = await sharp({ create: { width: 400, height: 250, channels: 3, background: '#336699' } })
+  .png().toBuffer();
 
 async function withApp(run) {
   const db = openDatabase(':memory:');
   migrate(db);
-  const server = createApp({ db, jwt }).listen(0);
+  const server = createApp({ db, jwt, idCardSecret: 'test-id-card-secret-0123456789-abcdef' }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   const request = (path, method = 'GET', token, body, contentType = 'application/json') => fetch(`${base}${path}`, {
     method,
@@ -87,7 +89,14 @@ test('ID card requests stay private and approval creates only the applicant memb
     assert.equal(image.status, 200);
     assert.equal(image.headers.get('cache-control'), 'no-store');
     assert.equal(image.headers.get('x-content-type-options'), 'nosniff');
-    assert.deepEqual(Buffer.from(await image.arrayBuffer()), photo);
+    const reviewedPhoto = Buffer.from(await image.arrayBuffer());
+    assert.equal((await sharp(reviewedPhoto).metadata()).format, 'jpeg');
+    assert.equal(image.headers.get('content-type'), 'image/jpeg');
+    const stored = db.prepare('SELECT id_card_photo, id_card_iv, id_card_tag FROM club_join_requests WHERE id = ?')
+      .get(requestId);
+    assert.notDeepEqual(stored.id_card_photo, reviewedPhoto);
+    assert.equal(stored.id_card_iv.length, 12);
+    assert.equal(stored.id_card_tag.length, 16);
     const listing = await (await request(`/admin/clubs/${club.id}/requests`, 'GET', admin)).json();
     assert.equal(listing.requests.length, 1);
     assert.equal(JSON.stringify(listing).includes('id_card_photo'), false);

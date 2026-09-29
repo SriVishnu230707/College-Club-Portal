@@ -1,7 +1,10 @@
+import sharp from 'sharp';
+
 export function expireJoinRequests(db) {
   db.prepare(`
     UPDATE club_join_requests
-    SET status = 'expired', id_card_photo = NULL, id_card_mime = NULL
+    SET status = 'expired', id_card_photo = NULL, id_card_mime = NULL,
+        id_card_iv = NULL, id_card_tag = NULL
     WHERE status = 'pending' AND expires_at <= ?
   `).run(new Date().toISOString());
 }
@@ -17,6 +20,25 @@ export function pagination(query) {
 export function page(rows, limit, key = 'id') {
   const items = rows.slice(0, limit);
   return { items, nextCursor: rows.length > limit ? items.at(-1)[key] : null };
+}
+
+export function createImageWorkLimit(maxActive = 4) {
+  let active = 0;
+  return (_req, res, next) => {
+    if (active >= maxActive) {
+      return res.set('Retry-After', '1').status(503).json({ error: 'Image processing is busy. Try again shortly.' });
+    }
+    active += 1;
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      active -= 1;
+    };
+    res.once('finish', release);
+    res.once('close', release);
+    return next();
+  };
 }
 
 export function clubInput(body, partial = false) {
@@ -38,10 +60,20 @@ export function clubInput(body, partial = false) {
     : { name, slug, description, status };
 }
 
-export function imageMime(buffer) {
-  if (!Buffer.isBuffer(buffer) || buffer.length < 12 || buffer.length > 2 * 1024 * 1024) return null;
-  if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return 'image/jpeg';
-  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
-  if (buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
-  return null;
+export async function sanitizeIdCard(buffer, declaredMime) {
+  const formats = { 'image/jpeg': 'jpeg', 'image/png': 'png', 'image/webp': 'webp' };
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0 || buffer.length > 2 * 1024 * 1024 ||
+      !Object.hasOwn(formats, declaredMime)) return null;
+  try {
+    const image = sharp(buffer, { limitInputPixels: 20_000_000, failOn: 'error', animated: false });
+    const metadata = await image.metadata();
+    if (metadata.format !== formats[declaredMime] || (metadata.pages ?? 1) !== 1 ||
+        metadata.width < 100 || metadata.height < 100) return null;
+    const photo = await image.rotate().flatten({ background: '#fff' })
+      .resize({ width: 2500, height: 2500, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 80 }).toBuffer();
+    return photo.length <= 2 * 1024 * 1024 ? photo : null;
+  } catch {
+    return null;
+  }
 }

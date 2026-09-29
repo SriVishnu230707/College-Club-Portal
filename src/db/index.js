@@ -10,6 +10,7 @@ export function openDatabase(file) {
   const db = new Database(file);
   db.pragma('foreign_keys = ON');
   db.pragma('journal_mode = WAL');
+  db.pragma('secure_delete = ON');
   return db;
 }
 

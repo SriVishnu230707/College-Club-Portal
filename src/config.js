@@ -22,11 +22,16 @@ export function loadConfig() {
   }
   const accessSecret = secret('JWT_ACCESS_SECRET');
   const refreshSecret = secret('JWT_REFRESH_SECRET');
+  const idCardSecret = secret('ID_CARD_ENCRYPTION_SECRET');
   if (accessSecret === refreshSecret) throw new Error('JWT access and refresh secrets must differ');
+  if (idCardSecret === accessSecret || idCardSecret === refreshSecret) {
+    throw new Error('ID card encryption secret must differ from JWT secrets');
+  }
   return Object.freeze({
     port,
     trustProxyHops,
     authHashConcurrency,
+    idCardSecret,
     databaseFile: resolve(process.env.DATABASE_FILE || './data/portal.sqlite'),
     jwt: Object.freeze({ accessSecret, refreshSecret, accessSeconds: 900, refreshSeconds: 604800 })
   });

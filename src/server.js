@@ -9,6 +9,7 @@ migrate(db);
 const server = createApp({
   db,
   jwt: config.jwt,
+  idCardSecret: config.idCardSecret,
   trustProxyHops: config.trustProxyHops,
   authHashConcurrency: config.authHashConcurrency
 }).listen(config.port, () => {

@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Router, raw } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { expireJoinRequests, imageMime, page, pagination } from '../clubs.js';
+import { createImageWorkLimit, expireJoinRequests, page, pagination, sanitizeIdCard } from '../clubs.js';
 
 const photoBody = raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: '2mb' });
 
-export function createClubsRouter(db, guards) {
+export function createClubsRouter(db, guards, cardCrypto) {
   const router = Router();
   const joinLimit = rateLimit({
     windowMs: 24 * 60 * 60 * 1000,
@@ -15,6 +15,7 @@ export function createClubsRouter(db, guards) {
     keyGenerator: req => req.user.id,
     message: { error: 'Too many join requests. Try again later.' }
   });
+  const imageWorkLimit = createImageWorkLimit();
 
   router.get('/', (req, res) => {
     const options = pagination(req.query);
@@ -47,35 +48,38 @@ export function createClubsRouter(db, guards) {
     return club ? res.json({ club }) : res.status(404).json({ error: 'Club not found' });
   });
 
-  router.post('/:id/join', guards.requireAuth, joinLimit, photoBody, (req, res) => {
-    const mime = imageMime(req.body);
-    if (!mime || req.get('content-type')?.split(';')[0].toLowerCase() !== mime) {
+  router.post('/:id/join', guards.requireAuth, joinLimit, imageWorkLimit, photoBody, async (req, res, next) => {
+    const declaredMime = req.get('content-type')?.split(';')[0].toLowerCase();
+    const photo = await sanitizeIdCard(req.body, declaredMime);
+    if (!photo) {
       return res.status(400).json({ error: 'A JPEG, PNG, or WebP college ID card photo up to 2 MB is required' });
     }
-    expireJoinRequests(db);
-    const club = db.prepare("SELECT id FROM clubs WHERE id = ? AND status = 'published'").get(req.params.id);
-    if (!club) return res.status(404).json({ error: 'Club not found' });
-    if (db.prepare('SELECT 1 FROM club_memberships WHERE club_id = ? AND user_id = ?').get(club.id, req.user.id)) {
-      return res.status(409).json({ error: 'Already a club member' });
-    }
-    const id = randomUUID();
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
     try {
+      expireJoinRequests(db);
+      const club = db.prepare("SELECT id FROM clubs WHERE id = ? AND status = 'published'").get(req.params.id);
+      if (!club) return res.status(404).json({ error: 'Club not found' });
+      if (db.prepare('SELECT 1 FROM club_memberships WHERE club_id = ? AND user_id = ?').get(club.id, req.user.id)) {
+        return res.status(409).json({ error: 'Already a club member' });
+      }
+      const id = randomUUID();
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const encrypted = cardCrypto.encrypt(id, photo);
       db.prepare(`
         INSERT INTO club_join_requests
-          (id, club_id, user_id, id_card_photo, id_card_mime, created_at, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(id, club.id, req.user.id, req.body, mime, now.toISOString(), expiresAt);
+          (id, club_id, user_id, id_card_photo, id_card_mime, id_card_iv, id_card_tag, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, club.id, req.user.id, encrypted.photo, 'image/jpeg', encrypted.iv, encrypted.tag,
+        now.toISOString(), expiresAt);
+      return res.status(201).set('Cache-Control', 'no-store').json({
+        request: { id, clubId: club.id, status: 'pending', expiresAt }
+      });
     } catch (error) {
       if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
         return res.status(409).json({ error: 'Join request already pending' });
       }
-      throw error;
+      return next(error);
     }
-    return res.status(201).set('Cache-Control', 'no-store').json({
-      request: { id, clubId: club.id, status: 'pending', expiresAt }
-    });
   });
 
   router.delete('/:id/membership', guards.requireAuth, (req, res) => {

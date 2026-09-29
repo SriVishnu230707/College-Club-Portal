@@ -8,11 +8,11 @@ const jwt = { accessSecret: 'test-access-secret-0123456789-abcdef', refreshSecre
 after(() => db.close());
 
 test('migrations create the auth schema once and enforce roles and email uniqueness', () => {
-  assert.deepEqual(migrate(db), { applied: 3, total: 3 });
-  assert.deepEqual(migrate(db), { applied: 0, total: 3 });
+  assert.deepEqual(migrate(db), { applied: 4, total: 4 });
+  assert.deepEqual(migrate(db), { applied: 0, total: 4 });
   assert.deepEqual(
     db.prepare("SELECT name FROM schema_migrations ORDER BY name").all().map(row => row.name),
-    ['001_auth_foundation.sql', '002_refresh_rotation.sql', '003_clubs.sql']
+    ['001_auth_foundation.sql', '002_refresh_rotation.sql', '003_clubs.sql', '004_id_card_encryption.sql']
   );
   db.prepare('INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)')
     .run('u1', 'Asha', 'asha@example.edu', 'test-hash');
@@ -25,7 +25,7 @@ test('migrations create the auth schema once and enforce roles and email uniquen
 
 test('health reports unavailable when the schema has not been migrated', async () => {
   const emptyDb = openDatabase(':memory:');
-  const server = createApp({ db: emptyDb, jwt }).listen(0);
+  const server = createApp({ db: emptyDb, jwt, idCardSecret: 'test-id-card-secret-0123456789-abcdef' }).listen(0);
   try {
     const response = await fetch(`http://127.0.0.1:${server.address().port}/health`);
     assert.equal(response.status, 503);
@@ -37,7 +37,7 @@ test('health reports unavailable when the schema has not been migrated', async (
 });
 
 test('Express health endpoint checks the database', async () => {
-  const server = createApp({ db, jwt }).listen(0);
+  const server = createApp({ db, jwt, idCardSecret: 'test-id-card-secret-0123456789-abcdef' }).listen(0);
   try {
     const response = await fetch(`http://127.0.0.1:${server.address().port}/health`);
     assert.equal(response.status, 200);

@@ -5,12 +5,18 @@ import { createAdminRouter } from './routes/admin.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createClubsRouter } from './routes/clubs.js';
 import { expireJoinRequests } from './clubs.js';
+import { createIdCardCrypto } from './security/id-card-crypto.js';
 
-export function createApp({ db, jwt, trustProxyHops = 0, rateLimits, authHashConcurrency = 8 }) {
+export function createApp({ db, jwt, idCardSecret, trustProxyHops = 0, rateLimits, authHashConcurrency = 8 }) {
   if (!jwt) throw new Error('JWT configuration is required');
+  if (idCardSecret === jwt.accessSecret || idCardSecret === jwt.refreshSecret) {
+    throw new Error('ID card encryption secret must differ from JWT secrets');
+  }
   const app = express();
+  const cardCrypto = createIdCardCrypto(idCardSecret);
   // Release ID card photos from requests that expired while the server was offline.
   if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'club_join_requests'").get()) {
+    cardCrypto.initialize(db);
     expireJoinRequests(db);
   }
   const guards = createAuthGuards(db, jwt);
@@ -27,8 +33,8 @@ export function createApp({ db, jwt, trustProxyHops = 0, rateLimits, authHashCon
   app.use('/auth/register', passwordWorkLimit);
   app.use('/auth/login', throttle.loginAccount, passwordWorkLimit);
   app.use('/auth', createAuthRouter(db, jwt, guards));
-  app.use('/clubs', createClubsRouter(db, guards));
-  app.use('/admin', createAdminRouter(db, guards));
+  app.use('/clubs', createClubsRouter(db, guards, cardCrypto));
+  app.use('/admin', createAdminRouter(db, guards, cardCrypto));
 
   app.get('/health', (_req, res) => {
     try {

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
-import { clubInput, expireJoinRequests, page, pagination } from '../clubs.js';
+import { clubInput, createImageWorkLimit, expireJoinRequests, page, pagination, sanitizeIdCard } from '../clubs.js';
 
 const clubColumns = 'id, name, slug, description, status, created_at AS createdAt, updated_at AS updatedAt';
 
@@ -91,22 +91,25 @@ export function createAdminClubsRouter(db) {
   return router;
 }
 
-export function createAdminJoinRequestsRouter(db) {
+export function createAdminJoinRequestsRouter(db, cardCrypto) {
   const router = Router();
+  const imageWorkLimit = createImageWorkLimit();
 
-  router.get('/:id/id-card', (req, res) => {
+  router.get('/:id/id-card', imageWorkLimit, async (req, res) => {
     expireJoinRequests(db);
     const row = db.prepare(`
-      SELECT id_card_photo AS photo, id_card_mime AS mime
+      SELECT id_card_photo AS photo, id_card_mime AS mime, id_card_iv AS iv, id_card_tag AS tag
       FROM club_join_requests WHERE id = ? AND status = 'pending'
     `).get(req.params.id);
     if (!row?.photo) return res.status(404).json({ error: 'Pending ID card not found' });
+    const photo = await sanitizeIdCard(cardCrypto.decrypt(req.params.id, row), row.mime);
+    if (!photo) return res.status(422).json({ error: 'Stored ID card image is invalid' });
     return res.set({
       'Cache-Control': 'no-store',
-      'Content-Type': row.mime,
+      'Content-Type': 'image/jpeg',
       'Content-Disposition': 'attachment; filename="college-id-card"',
       'X-Content-Type-Options': 'nosniff'
-    }).send(row.photo);
+    }).send(photo);
   });
 
   function review(req, res, decision) {
@@ -127,7 +130,8 @@ export function createAdminJoinRequestsRouter(db) {
       }
       db.prepare(`
         UPDATE club_join_requests
-        SET status = ?, reviewed_at = ?, reviewed_by = ?, id_card_photo = NULL, id_card_mime = NULL
+        SET status = ?, reviewed_at = ?, reviewed_by = ?, id_card_photo = NULL,
+            id_card_mime = NULL, id_card_iv = NULL, id_card_tag = NULL
         WHERE id = ?
       `).run(decision, new Date().toISOString(), req.user.id, request.id);
       return { status: 200, id: request.id };

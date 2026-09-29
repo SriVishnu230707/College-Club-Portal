@@ -20,8 +20,8 @@ test('registered users and refresh sessions survive a database restart', async (
   let server;
   try {
     db = openDatabase(file);
-    assert.deepEqual(migrate(db), { applied: 3, total: 3 });
-    server = createApp({ db, jwt }).listen(0);
+    assert.deepEqual(migrate(db), { applied: 4, total: 4 });
+    server = createApp({ db, jwt, idCardSecret: 'test-id-card-secret-0123456789-abcdef' }).listen(0);
     const url = `http://127.0.0.1:${server.address().port}`;
     const post = (path, body) => fetch(`${url}${path}`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
@@ -35,10 +35,10 @@ test('registered users and refresh sessions survive a database restart', async (
     db = undefined;
 
     db = openDatabase(file);
-    assert.deepEqual(migrate(db), { applied: 0, total: 3 });
+    assert.deepEqual(migrate(db), { applied: 0, total: 4 });
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM users').get().count, 1);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM refresh_sessions').get().count, 1);
-    server = createApp({ db, jwt }).listen(0);
+    server = createApp({ db, jwt, idCardSecret: 'test-id-card-secret-0123456789-abcdef' }).listen(0);
     const login = await fetch(`http://127.0.0.1:${server.address().port}/auth/login`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(credentials)
     });

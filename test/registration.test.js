@@ -9,7 +9,7 @@ const jwt = { accessSecret: 'test-access-secret-0123456789-abcdef', refreshSecre
 async function withApp(run) {
   const db = openDatabase(':memory:');
   migrate(db);
-  const server = createApp({ db, jwt }).listen(0);
+  const server = createApp({ db, jwt, idCardSecret: 'test-id-card-secret-0123456789-abcdef' }).listen(0);
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   try { await run({ db, baseUrl }); }
   finally {

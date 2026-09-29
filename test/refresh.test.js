@@ -16,7 +16,7 @@ const credentials = { email: 'asha@example.edu', password: 'a-long-private-passw
 async function withApp(run) {
   const db = openDatabase(':memory:');
   migrate(db);
-  const server = createApp({ db, jwt }).listen(0);
+  const server = createApp({ db, jwt, idCardSecret: 'test-id-card-secret-0123456789-abcdef' }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   const post = (path, body) => fetch(`${base}${path}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
@@ -115,8 +115,8 @@ test('migration upgrades an existing Phase 5 session in place', () => {
       .run(userId, 'Asha', credentials.email, 'test-hash');
     db.prepare('INSERT INTO refresh_sessions (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)')
       .run(sessionId, userId, 'legacy-digest', '2099-01-01T00:00:00.000Z');
-    assert.deepEqual(migrate(db), { applied: 2, total: 3 });
-    assert.deepEqual(migrate(db), { applied: 0, total: 3 });
+    assert.deepEqual(migrate(db), { applied: 3, total: 4 });
+    assert.deepEqual(migrate(db), { applied: 0, total: 4 });
     assert.deepEqual(db.prepare('SELECT family_id, rotated_at FROM refresh_sessions WHERE id = ?').get(sessionId),
       { family_id: sessionId, rotated_at: null });
   } finally {

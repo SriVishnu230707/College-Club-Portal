@@ -16,7 +16,7 @@ const jwt = {
 async function withApp(options, run) {
   const db = openDatabase(':memory:');
   migrate(db);
-  const server = createApp({ db, jwt, ...options }).listen(0);
+  const server = createApp({ db, jwt, idCardSecret: 'test-id-card-secret-0123456789-abcdef', ...options }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   const post = (path, body, headers = {}) => fetch(`${base}${path}`, {
     method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body)
@@ -84,7 +84,7 @@ test('login uses independent account and IP limits', async () => {
 test('malformed and oversized auth requests still count toward IP limits', async () => {
   const db = openDatabase(':memory:');
   migrate(db);
-  const server = createApp({ db, jwt, rateLimits: {
+  const server = createApp({ db, jwt, idCardSecret: 'test-id-card-secret-0123456789-abcdef', rateLimits: {
     registrationPerIp: 1, loginPerIp: 2, loginPerAccount: 10, sessionPerIp: 1
   } }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
