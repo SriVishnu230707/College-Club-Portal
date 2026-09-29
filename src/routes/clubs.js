@@ -83,9 +83,19 @@ export function createClubsRouter(db, guards, cardCrypto) {
   });
 
   router.delete('/:id/membership', guards.requireAuth, (req, res) => {
-    const result = db.prepare('DELETE FROM club_memberships WHERE club_id = ? AND user_id = ?')
-      .run(req.params.id, req.user.id);
-    return result.changes ? res.status(204).end() : res.status(404).json({ error: 'Membership not found' });
+    const removed = db.transaction(() => {
+      const result = db.prepare('DELETE FROM club_memberships WHERE club_id = ? AND user_id = ?')
+        .run(req.params.id, req.user.id);
+      if (!result.changes) return false;
+      db.prepare(`
+        DELETE FROM event_registrations WHERE user_id = ? AND event_id IN (
+          SELECT id FROM events WHERE club_id = ? AND audience = 'club_members'
+            AND status != 'cancelled' AND starts_at > ?
+        )
+      `).run(req.user.id, req.params.id, new Date().toISOString());
+      return true;
+    }).immediate();
+    return removed ? res.status(204).end() : res.status(404).json({ error: 'Membership not found' });
   });
 
   return router;

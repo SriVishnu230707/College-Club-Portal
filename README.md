@@ -1,6 +1,6 @@
 # College Club Portal
 
-Phase 1 requirements are in [docs/phase-1-requirements.md](docs/phase-1-requirements.md). Phase 2 provides the Express and SQLite foundation. Phase 3 adds member registration. Phase 4 adds login and JWT issuance. Phase 5 verifies access tokens and enforces member/admin roles. Phase 6 adds refresh rotation, replay detection, and logout. Phase 7 adds clubs, join requests with college ID card photos, and admin review.
+Phase 1 requirements are in [docs/phase-1-requirements.md](docs/phase-1-requirements.md). Phase 2 provides the Express and SQLite foundation. Phase 3 adds member registration. Phase 4 adds login and JWT issuance. Phase 5 verifies access tokens and enforces member/admin roles. Phase 6 adds refresh rotation, replay detection, and logout. Phase 7 adds clubs, join requests with college ID card photos, and admin review. Phase 8 adds events and registration.
 
 ## Local setup
 
@@ -75,14 +75,38 @@ Example admin club creation body:
 {"name":"Robotics Club","slug":"robotics-club","description":"Build and learn together","status":"published"}
 ```
 
-Events will be added in later portal work.
+## Events and registration
+
+Visitors can list published events with `GET /events?limit=50&cursor=<nextCursor>` and view one with `GET /events/:id`. Events from draft or archived clubs are hidden. Admins create events with `POST /admin/events`, list all statuses with `GET /admin/events`, inspect one with `GET /admin/events/:id`, edit or cancel it with `PATCH /admin/events/:id`, and page through attendees with `GET /admin/events/:id/attendees`. Only admins can see attendee names and email addresses.
+
+An event belongs to a club and has a title (2–150 characters), description (up to 5,000 characters), location (2–200 characters), `startsAt` and `endsAt` in exact UTC ISO form such as `2030-05-01T10:00:00.000Z`, capacity (1–10,000), audience (`club_members` or `all_members`), and status (`draft`, `published`, or `cancelled`). The default audience is `club_members`; the default status is `draft`. Start time must be in the future when creating or publishing. A published event requires a published club. Cancellation is final, but registrations remain visible in admin attendee lists and each attendee's own list.
+
+Example admin event creation body:
+
+```json
+{
+  "clubId": "<published-club-id>",
+  "title": "Robot Workshop",
+  "description": "Build a robot together",
+  "location": "Lab 1",
+  "startsAt": "2030-05-01T10:00:00.000Z",
+  "endsAt": "2030-05-01T12:00:00.000Z",
+  "capacity": 30,
+  "audience": "club_members",
+  "status": "published"
+}
+```
+
+Signed-in users register with `POST /events/:id/register`, cancel their own place with `DELETE /events/:id/registration`, and list their registrations with `GET /events/mine`. All lists support `limit` (1–100) and `cursor`. Club-only events require an approved membership in that specific club; a pending ID card request or admin role alone does not qualify. All-members events accept any signed-in account. The server derives the attendee ID from the verified access token. It closes registration and cancellation when the event starts. Leaving a club removes that user's future, non-cancelled club-only event registrations.
+
+The database assigns seats in a single write transaction, so simultaneous requests cannot exceed capacity. Duplicate registration and a full event return `409`. Admins cannot lower capacity below the current registration count or change the club/audience after someone has registered. Event registration changes are limited to 60 per account per 15 minutes on this server.
 
 ## Traffic limits and deployment
 
-The single-server API limits registration to 30 requests per IP in 15 minutes, login to 300 requests per IP and 20 per normalized email in 15 minutes, refresh/logout to 300 combined requests per IP in 15 minutes, join attempts to 10 per account per day, and password-hashing work to 8 concurrent requests. Excess attempts return `429`; an overloaded password worker returns `503` with a short retry hint. Each account can have at most 10 active login sessions. Revoked and rotated token digests are retained until expiry so reuse can be detected; expired records are removed during login or refresh.
+The single-server API limits registration to 30 requests per IP in 15 minutes, login to 300 requests per IP and 20 per normalized email in 15 minutes, refresh/logout to 300 combined requests per IP in 15 minutes, join attempts to 10 per account per day, event registration changes to 60 per account per 15 minutes, and password-hashing work to 8 concurrent requests. Excess attempts return `429`; an overloaded password worker or busy SQLite writer returns `503` with a short retry hint. Each account can have at most 10 active login sessions. Revoked and rotated token digests are retained until expiry so reuse can be detected; expired records are removed during login or refresh.
 
 The default `TRUST_PROXY_HOPS=0` ignores client-supplied forwarding headers. If the API is reachable only through a known reverse proxy, set this to the exact number of trusted proxy hops so IP limits identify clients correctly. Never increase it while clients can connect directly to the API.
 
-SQLite data is stored under `data/` by default and is excluded from Git. Migrations run at server startup as well as through `npm run migrate`. The schema contains `users`, `refresh_sessions`, `clubs`, `club_memberships`, `club_join_requests`, and `schema_migrations` tables. Visitors have no user row; registered accounts can have only `member` or `admin` as their role.
+SQLite data is stored under `data/` by default and is excluded from Git. Migrations run at server startup as well as through `npm run migrate`. The schema contains `users`, `refresh_sessions`, `clubs`, `club_memberships`, `club_join_requests`, `events`, `event_registrations`, and `schema_migrations` tables. Visitors have no user row; registered accounts can have only `member` or `admin` as their role.
 
 The current SQLite foundation and in-memory rate-limit counters are intended for one server instance. A multi-instance deployment needs a shared database and shared rate-limit store. SQLite WAL permits concurrent readers but only one writer at a time; plan a server database before running many API instances. Registration currently returns `409` for an existing email, which reveals account existence and remains a Phase 1 product decision to revisit before public deployment.

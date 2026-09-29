@@ -6,6 +6,7 @@ import { createAuthRouter } from './routes/auth.js';
 import { createClubsRouter } from './routes/clubs.js';
 import { expireJoinRequests } from './clubs.js';
 import { createIdCardCrypto } from './security/id-card-crypto.js';
+import { createEventsRouter } from './routes/events.js';
 
 export function createApp({ db, jwt, idCardSecret, trustProxyHops = 0, rateLimits, authHashConcurrency = 8 }) {
   if (!jwt) throw new Error('JWT configuration is required');
@@ -34,12 +35,14 @@ export function createApp({ db, jwt, idCardSecret, trustProxyHops = 0, rateLimit
   app.use('/auth/login', throttle.loginAccount, passwordWorkLimit);
   app.use('/auth', createAuthRouter(db, jwt, guards));
   app.use('/clubs', createClubsRouter(db, guards, cardCrypto));
+  app.use('/events', createEventsRouter(db, guards));
   app.use('/admin', createAdminRouter(db, guards, cardCrypto));
 
   app.get('/health', (_req, res) => {
     try {
       db.prepare('SELECT id FROM users LIMIT 0').all();
       db.prepare('SELECT id FROM refresh_sessions LIMIT 0').all();
+      db.prepare('SELECT id FROM events LIMIT 0').all();
       res.json({ status: 'ok', database: 'ok' });
     } catch {
       res.status(503).json({ status: 'unavailable', database: 'unavailable' });
@@ -50,6 +53,9 @@ export function createApp({ db, jwt, idCardSecret, trustProxyHops = 0, rateLimit
   app.use((error, _req, res, _next) => {
     if (error instanceof SyntaxError && 'body' in error) return res.status(400).json({ error: 'Invalid JSON' });
     if (error.status === 413) return res.status(413).json({ error: 'Request body too large' });
+    if (error.code === 'SQLITE_BUSY' || error.code === 'SQLITE_BUSY_SNAPSHOT') {
+      return res.set('Retry-After', '1').status(503).json({ error: 'Database is busy. Try again shortly.' });
+    }
     console.error(error);
     return res.status(500).json({ error: 'Internal server error' });
   });

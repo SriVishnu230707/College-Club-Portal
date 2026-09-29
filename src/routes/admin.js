@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { createAdminClubsRouter, createAdminJoinRequestsRouter } from './admin-clubs.js';
+import { createAdminEventsRouter } from './admin-events.js';
 
 export function createAdminRouter(db, guards, cardCrypto) {
   const router = Router();
   router.use(guards.requireAuth, guards.requireRole('admin'));
   router.use('/clubs', createAdminClubsRouter(db));
   router.use('/join-requests', createAdminJoinRequestsRouter(db, cardCrypto));
+  router.use('/events', createAdminEventsRouter(db));
 
   router.get('/users', (req, res) => {
     const rawLimit = req.query.limit;
