@@ -12,11 +12,14 @@ export function createApp({ db, jwt, trustProxyHops = 0, rateLimits, authHashCon
   const passwordWorkLimit = createPasswordWorkLimit(authHashConcurrency);
   app.disable('x-powered-by');
   app.set('trust proxy', trustProxyHops);
-  app.use(express.json({ limit: '16kb' }));
-  app.use('/auth/register', throttle.registration, passwordWorkLimit);
-  app.use('/auth/login', throttle.loginIp, throttle.loginAccount, passwordWorkLimit);
+  // Count malformed and oversized auth requests before the JSON parser rejects them.
+  app.use('/auth/register', throttle.registration);
+  app.use('/auth/login', throttle.loginIp);
   app.use('/auth/refresh', throttle.sessionIp);
   app.use('/auth/logout', throttle.sessionIp);
+  app.use(express.json({ limit: '16kb' }));
+  app.use('/auth/register', passwordWorkLimit);
+  app.use('/auth/login', throttle.loginAccount, passwordWorkLimit);
   app.use('/auth', createAuthRouter(db, jwt, guards));
   app.use('/admin', createAdminRouter(db, guards));
 

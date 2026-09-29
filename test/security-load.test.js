@@ -81,6 +81,33 @@ test('login uses independent account and IP limits', async () => {
   });
 });
 
+test('malformed and oversized auth requests still count toward IP limits', async () => {
+  const db = openDatabase(':memory:');
+  migrate(db);
+  const server = createApp({ db, jwt, rateLimits: {
+    registrationPerIp: 1, loginPerIp: 2, loginPerAccount: 10, sessionPerIp: 1
+  } }).listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const malformed = path => fetch(`${base}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: '{'
+  });
+  const oversized = path => fetch(`${base}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ data: 'x'.repeat(17000) })
+  });
+  try {
+    assert.equal((await malformed('/auth/login')).status, 400);
+    assert.equal((await oversized('/auth/login')).status, 413);
+    assert.equal((await malformed('/auth/login')).status, 429);
+    assert.equal((await malformed('/auth/register')).status, 400);
+    assert.equal((await malformed('/auth/register')).status, 429);
+    assert.equal((await malformed('/auth/refresh')).status, 400);
+    assert.equal((await malformed('/auth/logout')).status, 429);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    db.close();
+  }
+});
+
 test('repeated logins retain only the newest refresh sessions', async () => {
   await withApp({}, async ({ db, post }) => {
     const credentials = { email: 'asha@example.edu', password: 'a-long-private-password' };
