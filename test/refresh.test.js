@@ -115,8 +115,8 @@ test('migration upgrades an existing Phase 5 session in place', () => {
       .run(userId, 'Asha', credentials.email, 'test-hash');
     db.prepare('INSERT INTO refresh_sessions (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)')
       .run(sessionId, userId, 'legacy-digest', '2099-01-01T00:00:00.000Z');
-    assert.deepEqual(migrate(db), { applied: 4, total: 5 });
-    assert.deepEqual(migrate(db), { applied: 0, total: 5 });
+    assert.deepEqual(migrate(db), { applied: 5, total: 6 });
+    assert.deepEqual(migrate(db), { applied: 0, total: 6 });
     assert.deepEqual(db.prepare('SELECT family_id, rotated_at FROM refresh_sessions WHERE id = ?').get(sessionId),
       { family_id: sessionId, rotated_at: null });
   } finally {

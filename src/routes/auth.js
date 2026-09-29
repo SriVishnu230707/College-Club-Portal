@@ -3,6 +3,7 @@ import { Router } from 'express';
 import argon2 from 'argon2';
 import { revokeRefreshSession, rotateRefreshSession, saveRefreshSession } from '../security/sessions.js';
 import { issueTokens, refreshTokenDigest, verifyRefreshToken } from '../security/tokens.js';
+import { createAccountToken } from '../security/account-tokens.js';
 
 const passwordHashOptions = {
   type: argon2.argon2id,
@@ -51,11 +52,26 @@ function sendTokens(res, tokens, user, jwt) {
   });
 }
 
-export function createAuthRouter(db, jwt, guards) {
+export function createAuthRouter(db, jwt, guards, deliverAccountLink = async () => {}) {
   const router = Router();
 
   router.get('/me', guards.requireAuth, (req, res) => {
-    res.set('Cache-Control', 'no-store').json({ user: req.user });
+    const { id, name, email, role } = req.user;
+    res.set('Cache-Control', 'no-store').json({ user: { id, name, email, role } });
+  });
+
+  router.get('/status', guards.requireAuth, (req, res) => {
+    res.set('Cache-Control', 'no-store').json({ emailVerified: Boolean(req.user.emailVerifiedAt) });
+  });
+
+  router.patch('/profile', guards.requireAuth, (req, res) => {
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    if (name.length < 2 || name.length > 100 || Object.keys(req.body || {}).some(key => key !== 'name')) {
+      return res.status(400).json({ error: 'Name must be 2 to 100 characters' });
+    }
+    db.prepare('UPDATE users SET name = ?, updated_at = ? WHERE id = ?')
+      .run(name, new Date().toISOString(), req.user.id);
+    return res.set('Cache-Control', 'no-store').json({ user: { id: req.user.id, name, email: req.user.email, role: req.user.role } });
   });
 
   router.post('/register', async (req, res, next) => {
@@ -74,6 +90,8 @@ export function createAuthRouter(db, jwt, guards) {
         }
         throw error;
       }
+      const verificationToken = createAccountToken(db, id, 'verify');
+      await deliverAccountLink({ email, purpose: 'verify', token: verificationToken });
       return res.status(201).json({ user: { id, name, email, role: 'member' } });
     } catch (error) {
       return next(error);

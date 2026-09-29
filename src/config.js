@@ -29,6 +29,7 @@ export function loadConfig() {
   }
   return Object.freeze({
     port,
+    host: process.env.HOST || '127.0.0.1',
     trustProxyHops,
     authHashConcurrency,
     idCardSecret,

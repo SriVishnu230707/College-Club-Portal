@@ -48,7 +48,7 @@ export function createClubsRouter(db, guards, cardCrypto) {
     return club ? res.json({ club }) : res.status(404).json({ error: 'Club not found' });
   });
 
-  router.post('/:id/join', guards.requireAuth, joinLimit, imageWorkLimit, photoBody, async (req, res, next) => {
+  router.post('/:id/join', guards.requireAuth, guards.requireVerified, joinLimit, imageWorkLimit, photoBody, async (req, res, next) => {
     const declaredMime = req.get('content-type')?.split(';')[0].toLowerCase();
     const photo = await sanitizeIdCard(req.body, declaredMime);
     if (!photo) {

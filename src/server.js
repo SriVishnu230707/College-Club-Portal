@@ -11,9 +11,14 @@ const server = createApp({
   jwt: config.jwt,
   idCardSecret: config.idCardSecret,
   trustProxyHops: config.trustProxyHops,
-  authHashConcurrency: config.authHashConcurrency
-}).listen(config.port, () => {
-  console.log(`College Club Portal API listening on port ${server.address().port}`);
+  authHashConcurrency: config.authHashConcurrency,
+  requireVerifiedEmail: true,
+  deliverAccountLink: async ({ email, purpose, token }) => {
+    const action = purpose === 'verify' ? 'verify' : 'reset';
+    console.log(`${purpose} link for ${email}: http://${config.host}:${config.port}/?action=${action}&token=${token}`);
+  }
+}).listen(config.port, config.host, () => {
+  console.log(`College Club Portal listening at http://${config.host}:${server.address().port}`);
 });
 
 const expirySweep = setInterval(() => {

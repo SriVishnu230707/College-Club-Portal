@@ -1,6 +1,24 @@
 # College Club Portal
 
-Phase 1 requirements are in [docs/phase-1-requirements.md](docs/phase-1-requirements.md). Phase 2 provides the Express and SQLite foundation. Phase 3 adds member registration. Phase 4 adds login and JWT issuance. Phase 5 verifies access tokens and enforces member/admin roles. Phase 6 adds refresh rotation, replay detection, and logout. Phase 7 adds clubs, join requests with college ID card photos, and admin review. Phase 8 adds events and registration.
+Phase 1 requirements are in [docs/phase-1-requirements.md](docs/phase-1-requirements.md). The local application now includes a browser interface, JWT login and refresh, email verification, password recovery, clubs, encrypted ID card review, events, and admin controls.
+
+## Use the local application
+
+1. Run `npm install`.
+2. Copy `.env.example` to `.env`. Generate three different random secrets of at least 32 characters for the JWT and ID card settings. Keep `.env` private and stable.
+3. Run `npm start` and open `http://127.0.0.1:3000/`.
+4. Create an account. Verification and password reset links appear in the **server terminal** for this local version. Open the link in your browser and confirm it.
+5. To create the first admin, stop the server and run `npm run make-admin -- student@example.edu`, then restart it. The account must exist first.
+
+The server binds to `127.0.0.1` by default. The browser keeps tokens in memory, so reloading the page requires another login. This avoids storing refresh tokens in browser storage. Club joining and event registration require a verified email in the local app. The API can still be created with `requireVerifiedEmail: false` for legacy integrations and tests.
+
+This is a **local-first application**. Terminal delivery of account links is suitable for local use; hosting it for other people requires an email provider, HTTPS, a persistent shared database and rate-limit store, backups, and deployment configuration. Do not expose the current terminal-link setup to the public internet.
+
+## Account endpoints
+
+`POST /auth/verification/request` and `POST /auth/password/forgot` accept `{ "email": "..." }` and return a generic response. `POST /auth/verification/confirm` accepts `{ "token": "..." }`. `POST /auth/password/reset` accepts `{ "token": "...", "password": "..." }`. Verification links expire after 24 hours; reset links expire after 30 minutes. They are single use and stored only as SHA-256 hashes. Resetting a password revokes all refresh sessions, so all devices must log in again. Previously issued access JWTs can remain valid until their 15-minute expiry.
+
+`GET /auth/status` reports whether the signed-in account's email is verified. `PATCH /auth/profile` accepts `{ "name": "..." }` to update the signed-in user's display name.
 
 ## Local setup
 

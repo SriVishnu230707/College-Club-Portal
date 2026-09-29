@@ -1,6 +1,6 @@
 import { verifyAccessToken } from '../security/tokens.js';
 
-export function createAuthGuards(db, jwt) {
+export function createAuthGuards(db, jwt, { requireVerifiedEmail = false } = {}) {
   async function requireAuth(req, res, next) {
     const match = /^Bearer (\S+)$/i.exec(req.get('authorization') || '');
     if (!match) return res.status(401).json({ error: 'Authentication required' });
@@ -13,7 +13,7 @@ export function createAuthGuards(db, jwt) {
     }
 
     try {
-      const user = db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(claims.sub);
+      const user = db.prepare('SELECT id, name, email, role, email_verified_at AS emailVerifiedAt FROM users WHERE id = ?').get(claims.sub);
       if (!user) return res.status(401).json({ error: 'Authentication required' });
       req.user = user;
       return next();
@@ -29,5 +29,12 @@ export function createAuthGuards(db, jwt) {
     };
   }
 
-  return { requireAuth, requireRole };
+  function requireVerified(req, res, next) {
+    if (requireVerifiedEmail && !req.user?.emailVerifiedAt) {
+      return res.status(403).json({ error: 'Verify your email before this action' });
+    }
+    return next();
+  }
+
+  return { requireAuth, requireRole, requireVerified };
 }

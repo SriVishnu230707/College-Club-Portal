@@ -7,8 +7,11 @@ import { createClubsRouter } from './routes/clubs.js';
 import { expireJoinRequests } from './clubs.js';
 import { createIdCardCrypto } from './security/id-card-crypto.js';
 import { createEventsRouter } from './routes/events.js';
+import { createAccountRouter } from './routes/account.js';
+import { fileURLToPath } from 'node:url';
 
-export function createApp({ db, jwt, idCardSecret, trustProxyHops = 0, rateLimits, authHashConcurrency = 8 }) {
+export function createApp({ db, jwt, idCardSecret, trustProxyHops = 0, rateLimits, authHashConcurrency = 8,
+  deliverAccountLink = async () => {}, requireVerifiedEmail = false }) {
   if (!jwt) throw new Error('JWT configuration is required');
   if (idCardSecret === jwt.accessSecret || idCardSecret === jwt.refreshSecret) {
     throw new Error('ID card encryption secret must differ from JWT secrets');
@@ -20,25 +23,44 @@ export function createApp({ db, jwt, idCardSecret, trustProxyHops = 0, rateLimit
     cardCrypto.initialize(db);
     expireJoinRequests(db);
   }
-  const guards = createAuthGuards(db, jwt);
+  const guards = createAuthGuards(db, jwt, { requireVerifiedEmail });
   const throttle = createAuthThrottle(rateLimits);
   const passwordWorkLimit = createPasswordWorkLimit(authHashConcurrency);
   app.disable('x-powered-by');
   app.set('trust proxy', trustProxyHops);
+  app.use((_req, res, next) => {
+    res.set({
+      'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()'
+    });
+    next();
+  });
   // Count malformed and oversized auth requests before the JSON parser rejects them.
   app.use('/auth/register', throttle.registration);
   app.use('/auth/login', throttle.loginIp);
   app.use('/auth/refresh', throttle.sessionIp);
   app.use('/auth/logout', throttle.sessionIp);
+  app.use('/auth/verification/request', throttle.registration);
+  app.use('/auth/password/forgot', throttle.registration);
+  app.use('/auth/password/reset', throttle.registration);
+  app.use('/auth/verification/confirm', throttle.registration);
   app.use('/events/:id/register', throttle.eventMutationIp);
   app.use('/events/:id/registration', throttle.eventMutationIp);
   app.use(express.json({ limit: '16kb' }));
   app.use('/auth/register', passwordWorkLimit);
   app.use('/auth/login', throttle.loginAccount, passwordWorkLimit);
-  app.use('/auth', createAuthRouter(db, jwt, guards));
+  app.use('/auth/password/reset', passwordWorkLimit);
+  app.use('/auth', createAuthRouter(db, jwt, guards, deliverAccountLink));
+  app.use('/auth', createAccountRouter(db, deliverAccountLink));
   app.use('/clubs', createClubsRouter(db, guards, cardCrypto));
   app.use('/events', createEventsRouter(db, guards));
   app.use('/admin', createAdminRouter(db, guards, cardCrypto));
+
+  const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
+  app.use(express.static(publicDir, { index: 'index.html', dotfiles: 'deny' }));
 
   app.get('/health', (_req, res) => {
     try {

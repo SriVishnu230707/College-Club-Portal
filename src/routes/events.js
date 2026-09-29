@@ -46,7 +46,7 @@ export function createEventsRouter(db, guards) {
     return event ? res.json({ event }) : res.status(404).json({ error: 'Event not found' });
   });
 
-  router.post('/:id/register', guards.requireAuth, registrationLimit, (req, res) => {
+  router.post('/:id/register', guards.requireAuth, guards.requireVerified, registrationLimit, (req, res) => {
     const result = db.transaction(() => {
       const event = db.prepare(`
         SELECT e.id, e.club_id AS clubId, e.starts_at AS startsAt, e.capacity, e.audience

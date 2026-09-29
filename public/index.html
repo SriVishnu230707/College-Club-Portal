@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Discover college clubs and events.">
+  <title>College Club Portal</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">✳ <span>College Club Portal</span></a>
+    <nav aria-label="Main navigation">
+      <button data-view="discover" class="nav active">Discover</button>
+      <button data-view="mine" class="nav" hidden>My activity</button>
+      <button data-view="admin" class="nav" hidden>Admin</button>
+    </nav>
+    <div id="account-actions"><button id="login-open" class="button ghost">Log in</button><button id="register-open" class="button primary">Join portal</button></div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy"><p class="eyebrow">YOUR CAMPUS, MORE CONNECTED</p><h1>Find your people.<br><em>Make things happen.</em></h1><p>Explore clubs, discover upcoming events, and join the communities that make campus yours.</p><button id="hero-action" class="button primary">Explore clubs</button></div>
+      <div class="hero-art" aria-hidden="true"><span class="orb one"></span><span class="orb two"></span><span class="hero-mark">✳</span><p>Ideas grow<br>together.</p></div>
+    </section>
+
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+
+    <section id="discover-view" class="view">
+      <div class="section-heading"><div><p class="eyebrow">EXPLORE</p><h2>Clubs on campus</h2></div><button id="reload-clubs" class="text-button">Refresh ↗</button></div>
+      <div id="club-list" class="card-grid"></div><button id="more-clubs" class="button outline" hidden>Load more clubs</button>
+      <div class="section-heading event-heading"><div><p class="eyebrow">UP NEXT</p><h2>Events worth showing up for</h2></div><button id="reload-events" class="text-button">Refresh ↗</button></div>
+      <div id="event-list" class="card-grid"></div><button id="more-events" class="button outline" hidden>Load more events</button>
+    </section>
+
+    <section id="mine-view" class="view" hidden>
+      <div class="section-heading"><div><p class="eyebrow">YOUR SPACE</p><h2>My activity</h2></div></div>
+      <div id="profile-card" class="panel"></div>
+      <div class="columns"><div><h3>My clubs</h3><div id="my-clubs"></div></div><div><h3>My events</h3><div id="my-events"></div></div></div>
+    </section>
+
+    <section id="admin-view" class="view" hidden>
+      <div class="section-heading"><div><p class="eyebrow">MANAGE</p><h2>Admin workspace</h2></div></div>
+      <div class="columns">
+        <form id="club-form" class="panel form-stack"><h3>Create club</h3><label>Name<input name="name" minlength="2" maxlength="100" required></label><label>Slug<input name="slug" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required></label><label>Description<textarea name="description" maxlength="2000"></textarea></label><label>Status<select name="status"><option value="draft">Draft</option><option value="published">Published</option></select></label><button class="button primary">Create club</button></form>
+        <form id="event-form" class="panel form-stack"><h3>Create event</h3><label>Club<select name="clubId" id="event-club" required></select></label><label>Title<input name="title" minlength="2" maxlength="150" required></label><label>Description<textarea name="description" maxlength="5000"></textarea></label><label>Location<input name="location" minlength="2" maxlength="200" required></label><label>Starts<input name="startsAt" type="datetime-local" required></label><label>Ends<input name="endsAt" type="datetime-local" required></label><label>Capacity<input name="capacity" type="number" min="1" max="10000" value="30" required></label><label>Audience<select name="audience"><option value="club_members">Club members</option><option value="all_members">All members</option></select></label><label>Status<select name="status"><option value="draft">Draft</option><option value="published">Published</option></select></label><button class="button primary">Create event</button></form>
+      </div>
+      <h3>Clubs and join requests</h3><div id="admin-clubs" class="stack"></div>
+      <h3>Events and attendees</h3><div id="admin-events" class="stack"></div>
+      <h3>Accounts</h3><div id="admin-users" class="stack"></div>
+    </section>
+  </main>
+
+  <dialog id="auth-dialog"><form method="dialog"><button class="close" aria-label="Close">×</button></form><div id="auth-content"></div></dialog>
+  <footer>College Club Portal · Built for campus communities</footer>
+</body>
+</html>
