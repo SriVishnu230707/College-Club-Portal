@@ -13,8 +13,16 @@ export function createAuthGuards(db, jwt, { requireVerifiedEmail = false } = {})
     }
 
     try {
-      const user = db.prepare('SELECT id, name, email, role, email_verified_at AS emailVerifiedAt FROM users WHERE id = ?').get(claims.sub);
+      const user = db.prepare('SELECT id, name, email, role, email_verified_at AS emailVerifiedAt, auth_version AS authVersion FROM users WHERE id = ?').get(claims.sub);
       if (!user) return res.status(401).json({ error: 'Authentication required' });
+      if ((claims.authVersion ?? 0) !== user.authVersion) {
+        return res.status(401).json({ error: 'Session no longer valid' });
+      }
+      const session = db.prepare(`
+        SELECT 1 FROM refresh_sessions
+        WHERE id = ? AND user_id = ? AND revoked_at IS NULL AND expires_at > ?
+      `).get(claims.sessionId, user.id, new Date().toISOString());
+      if (!session) return res.status(401).json({ error: 'Session no longer valid' });
       req.user = user;
       return next();
     } catch (error) {

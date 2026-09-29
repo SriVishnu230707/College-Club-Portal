@@ -8,10 +8,10 @@ export function refreshTokenDigest(token) {
   return createHash('sha256').update(token).digest('hex');
 }
 
-export async function issueTokens(userId, jwt) {
+export async function issueTokens(userId, jwt, authVersion = 0) {
   const now = Math.floor(Date.now() / 1000);
   const sessionId = randomUUID();
-  const accessToken = await new SignJWT({ type: 'access' })
+  const accessToken = await new SignJWT({ type: 'access', authVersion, sessionId })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setIssuer(issuer)
     .setAudience('college-club-portal:access')
@@ -48,7 +48,8 @@ export async function verifyAccessToken(token, jwt) {
     typ: 'JWT',
     requiredClaims: ['sub', 'iat', 'exp', 'jti']
   });
-  if (payload.type !== 'access' || typeof payload.sub !== 'string' || !payload.sub) {
+  if (payload.type !== 'access' || typeof payload.sub !== 'string' || !payload.sub ||
+      typeof payload.sessionId !== 'string' || !payload.sessionId) {
     throw new Error('Invalid access token');
   }
   return payload;

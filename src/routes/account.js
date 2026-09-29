@@ -45,7 +45,7 @@ export function createAccountRouter(db, deliverAccountLink) {
       const passwordHash = await argon2.hash(password, hashOptions);
       const success = consumeAccountToken(db, req.body?.token, 'reset', userId => {
         const now = new Date().toISOString();
-        db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(passwordHash, now, userId);
+        db.prepare('UPDATE users SET password_hash = ?, auth_version = auth_version + 1, updated_at = ? WHERE id = ?').run(passwordHash, now, userId);
         db.prepare('UPDATE refresh_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').run(now, userId);
         db.prepare("DELETE FROM account_tokens WHERE user_id = ? AND purpose = 'reset'").run(userId);
       });

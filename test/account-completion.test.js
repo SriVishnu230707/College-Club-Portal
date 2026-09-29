@@ -37,6 +37,7 @@ test('local portal serves its browser app and secures email verification and pas
     assert.equal(reset.status, 200);
     assert.equal((await post('/auth/password/reset', { token: links[1].token, password: 'new-long-password-123' })).status, 400);
     assert.equal((await post('/auth/refresh', { refreshToken: session.refreshToken })).status, 401);
+    assert.equal((await fetch(base + '/auth/me', { headers: { Authorization: `Bearer ${session.accessToken}` } })).status, 401);
     assert.equal((await post('/auth/login', { email: 'asha@example.edu', password: 'original-password-123' })).status, 401);
     assert.equal((await post('/auth/login', { email: 'asha@example.edu', password: 'new-long-password-123' })).status, 200);
   } finally {

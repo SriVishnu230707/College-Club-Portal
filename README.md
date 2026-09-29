@@ -16,7 +16,7 @@ This is a **local-first application**. Terminal delivery of account links is sui
 
 ## Account endpoints
 
-`POST /auth/verification/request` and `POST /auth/password/forgot` accept `{ "email": "..." }` and return a generic response. `POST /auth/verification/confirm` accepts `{ "token": "..." }`. `POST /auth/password/reset` accepts `{ "token": "...", "password": "..." }`. Verification links expire after 24 hours; reset links expire after 30 minutes. They are single use and stored only as SHA-256 hashes. Resetting a password revokes all refresh sessions, so all devices must log in again. Previously issued access JWTs can remain valid until their 15-minute expiry.
+`POST /auth/verification/request` and `POST /auth/password/forgot` accept `{ "email": "..." }` and return a generic response. `POST /auth/verification/confirm` accepts `{ "token": "..." }`. `POST /auth/password/reset` accepts `{ "token": "...", "password": "..." }`. Verification links expire after 24 hours; reset links expire after 30 minutes. They are single use and stored only as SHA-256 hashes. Resetting a password increments the account's authentication version and revokes all refresh sessions, so existing access JWTs also stop working immediately and all devices must log in again.
 
 `GET /auth/status` reports whether the signed-in account's email is verified. `PATCH /auth/profile` accepts `{ "name": "..." }` to update the signed-in user's display name.
 
@@ -42,7 +42,7 @@ Send `POST /auth/register` with JSON:
 }
 ```
 
-Successful registration returns `201` with the new user's public `id`, `name`, `email`, and `member` role. It does not log the user in or issue a JWT yet. The password must be 12 to 128 characters. Registration is currently open to any email address; email verification has not been implemented. Duplicate emails return `409`.
+Successful registration returns `201` with the new user's public `id`, `name`, `email`, and `member` role. It does not log the user in or issue a JWT yet. The password must be 12 to 128 characters. Registration is currently open to any email address. The local server prints a verification link; members must confirm it before joining clubs or registering for events. Duplicate emails return `409`.
 
 ## Log in
 
@@ -75,7 +75,7 @@ Public registration never grants admin rights. To promote an existing account lo
 
 Send `POST /auth/refresh` with JSON `{ "refreshToken": "<refreshToken>" }` before the access token expires. It returns the same response shape as login, with a new access token and a new refresh token. Replace the stored refresh token immediately. Each refresh token can be exchanged only once. If an already exchanged token is used again, all active refresh tokens in that login's token family are revoked. Clients should coordinate refresh calls so only one request exchanges a given token at a time. Invalid or expired tokens return `401`.
 
-Send `POST /auth/logout` with the current refresh token in the same JSON shape. It revokes that login's token family and returns `204`. Repeating logout also returns `204`. Other logins remain active. A previously issued access token remains usable until its 15-minute expiry, unless the account is removed. The client should discard both tokens on logout. A refreshed response reads the current role from SQLite; visitors have no tokens.
+Send `POST /auth/logout` with the current refresh token in the same JSON shape. It revokes that login's token family and returns `204`. Repeating logout also returns `204`. Other logins remain active. Access tokens are tied to active server-side sessions, so logout or refresh rotation invalidates the previous access token immediately. The client should discard both tokens on logout. A refreshed response reads the current role from SQLite; visitors have no tokens.
 
 ## Clubs and membership
 

@@ -34,7 +34,7 @@ async function withApp(run) {
 }
 
 test('refresh rotates a token and replay revokes only its family', async () => {
-  await withApp(async ({ db, post }) => {
+  await withApp(async ({ db, post, get }) => {
     const first = await (await post('/auth/login', credentials)).json();
     const other = await (await post('/auth/login', credentials)).json();
     const exchanged = await post('/auth/refresh', { refreshToken: first.refreshToken });
@@ -43,6 +43,8 @@ test('refresh rotates a token and replay revokes only its family', async () => {
     const second = await exchanged.json();
     assert.notEqual(second.refreshToken, first.refreshToken);
     assert.equal(second.user.role, 'member');
+    assert.equal((await get('/auth/me', first.accessToken)).status, 401);
+    assert.equal((await get('/auth/me', second.accessToken)).status, 200);
     const rows = db.prepare('SELECT family_id, revoked_at, rotated_at FROM refresh_sessions ORDER BY rowid').all();
     assert.equal(rows[0].family_id, rows[2].family_id);
     assert.notEqual(rows[0].family_id, rows[1].family_id);
@@ -77,7 +79,7 @@ test('logout is idempotent and revokes just one login family', async () => {
     assert.equal((await post('/auth/logout', { refreshToken: first.refreshToken })).status, 204);
     assert.equal((await post('/auth/refresh', { refreshToken: first.refreshToken })).status, 401);
     assert.equal((await post('/auth/refresh', { refreshToken: other.refreshToken })).status, 200);
-    assert.equal((await get('/auth/me', first.accessToken)).status, 200);
+    assert.equal((await get('/auth/me', first.accessToken)).status, 401);
   });
 });
 
@@ -115,8 +117,8 @@ test('migration upgrades an existing Phase 5 session in place', () => {
       .run(userId, 'Asha', credentials.email, 'test-hash');
     db.prepare('INSERT INTO refresh_sessions (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)')
       .run(sessionId, userId, 'legacy-digest', '2099-01-01T00:00:00.000Z');
-    assert.deepEqual(migrate(db), { applied: 5, total: 6 });
-    assert.deepEqual(migrate(db), { applied: 0, total: 6 });
+    assert.deepEqual(migrate(db), { applied: 6, total: 7 });
+    assert.deepEqual(migrate(db), { applied: 0, total: 7 });
     assert.deepEqual(db.prepare('SELECT family_id, rotated_at FROM refresh_sessions WHERE id = ?').get(sessionId),
       { family_id: sessionId, rotated_at: null });
   } finally {

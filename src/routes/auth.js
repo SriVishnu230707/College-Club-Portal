@@ -109,11 +109,11 @@ export function createAuthRouter(db, jwt, guards, deliverAccountLink = async () 
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
 
     try {
-      const user = db.prepare('SELECT id, name, email, password_hash, role FROM users WHERE email = ?').get(email);
+      const user = db.prepare('SELECT id, name, email, password_hash, role, auth_version AS authVersion FROM users WHERE email = ?').get(email);
       const matches = await argon2.verify(user?.password_hash ?? dummyPasswordHash, password);
       if (!user || !matches) return res.status(401).json({ error: 'Invalid credentials' });
 
-      const tokens = await issueTokens(user.id, jwt);
+      const tokens = await issueTokens(user.id, jwt, user.authVersion);
       saveRefreshSession(db, user.id, tokens);
       return sendTokens(res, tokens, user, jwt);
     } catch (error) {
@@ -130,7 +130,9 @@ export function createAuthRouter(db, jwt, guards, deliverAccountLink = async () 
       } catch {
         return res.status(401).json({ error: 'Invalid refresh token' });
       }
-      const tokens = await issueTokens(claims.sub, jwt);
+      const version = db.prepare('SELECT auth_version AS authVersion FROM users WHERE id = ?').get(claims.sub);
+      if (!version) return res.status(401).json({ error: 'Invalid refresh token' });
+      const tokens = await issueTokens(claims.sub, jwt, version.authVersion);
       const result = rotateRefreshSession(db, claims, refreshTokenDigest(req.body.refreshToken), tokens);
       if (result.status !== 'ok') return res.status(401).json({ error: 'Invalid refresh token' });
       return sendTokens(res, tokens, result.user, jwt);
